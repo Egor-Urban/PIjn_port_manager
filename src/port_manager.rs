@@ -4,7 +4,7 @@ use std::fs;
 
 fn read_ports_file() -> Result<HashMap<String, u16>, String> {
     let content = fs::read_to_string("ports.json")
-        .map_err(|e| format!("Не удалось прочитать ports.json: {}", e))?;
+        .map_err(|e| format!("Cant read ports.json: {}", e))?;
 
     let ports: HashMap<String, u16> = serde_json::from_str(&content)
         .map_err(|e| format!("Error with JSON parsing: {}", e))?;
