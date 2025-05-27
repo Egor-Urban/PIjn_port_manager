@@ -1,3 +1,11 @@
+/*
+Port manager microservice for PIjN protocol project
+Developer: Urban Egor
+Version: 4.4.14 r
+*/
+
+
+
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder, middleware::Logger, HttpRequest};
 use chrono::Local;
 use once_cell::sync::Lazy;
@@ -71,6 +79,18 @@ async fn get_port_handler(req: HttpRequest, path: web::Path<PathParams>) -> impl
 }
 
 
+#[get("/status")]
+async fn get_module_status(req: HttpRequest) -> impl Responder {
+    let client_addr = req.peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|| "Unknown".to_string());
+
+
+        LOGGER.log("get_module_status", "INFO", &format!("Client {} get status", client_addr));
+        HttpResponse::Ok().json(serde_json::json!({ "success": true, "data": null }))
+}
+
+
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -83,6 +103,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(Logger::default())
             .service(get_port_handler)
+            .service(get_module_status)
     })
     .workers(4)
     .bind((ip, port))?

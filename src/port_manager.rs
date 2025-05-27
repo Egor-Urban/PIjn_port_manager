@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 use std::fs;
-use serde::Deserialize;
-
 
 
 fn read_ports_file() -> Result<HashMap<String, u16>, String> {
