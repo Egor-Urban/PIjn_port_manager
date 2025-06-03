@@ -105,7 +105,7 @@ async fn main() -> std::io::Result<()> {
             .service(status_handler)
             .service(stop_handler)
     })
-    .workers(4)
+    .workers(config.workers_count)
     .bind((ip.as_str(), port))?
     .run()
     .await

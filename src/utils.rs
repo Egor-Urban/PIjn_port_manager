@@ -11,6 +11,7 @@ pub struct Config {
     pub static_port: Option<u16>,
     pub name_for_port_manager: String,
     pub logs_dir: String,
+    pub workers_count: usize
 }
 
 
