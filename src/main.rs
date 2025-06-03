@@ -1,23 +1,40 @@
 /*
 Port manager microservice for PIjN protocol project
 Developer: Urban Egor
-Version: 5.5.20 r
+Version: 6.5.21 r
 */
 
-use actix_web::{get, web, App, HttpServer, HttpResponse, Responder, middleware::Logger, HttpRequest};
-use serde::Deserialize;
-use chrono::Local;
-use tracing::{info, warn};
-use tracing_subscriber;
 
+
+use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use serde::{Deserialize, Serialize};
+use std::time::Instant;
+use tokio::time::Duration;
+use tracing::{info};
+
+mod status;
+mod utils;
 mod port_manager;
+
+use status::get_status;
+use utils::{init_tracing, load_config};
+use port_manager::resolve_service_port;
+
+
+
+#[derive(Serialize, Deserialize)]
+struct ApiResponse<T> {
+    success: bool,
+    data: T,
+}
+
 
 #[derive(Deserialize)]
 struct PathParams {
     service_name: String,
 }
 
-// ------------------ Handlers --------------------
+
 
 #[get("/getport/{service_name}")]
 async fn get_port_handler(req: HttpRequest, path: web::Path<PathParams>) -> impl Responder {
@@ -27,65 +44,69 @@ async fn get_port_handler(req: HttpRequest, path: web::Path<PathParams>) -> impl
 
     let service_name = &path.service_name;
 
-    match port_manager::resolve_service_port(service_name) {
+    match resolve_service_port(service_name) {
         Ok(port) => {
             info!(target: "get_port_handler", "Client {} got port {} for '{}'", client_addr, port, service_name);
             HttpResponse::Ok().json(serde_json::json!({ "success": true, "data": port }))
         }
         Err(err_msg) => {
-            warn!(target: "get_port_handler", "Client {} — {}", client_addr, err_msg);
+            tracing::warn!(target: "get_port_handler", "Client {} — {}", client_addr, err_msg);
             HttpResponse::NotFound().json(serde_json::json!({ "success": false, "error": err_msg }))
         }
     }
 }
 
+
 #[get("/status")]
-async fn get_module_status(req: HttpRequest) -> impl Responder {
-    let client_addr = req.peer_addr()
+async fn status_handler(start: web::Data<Instant>, req: HttpRequest) -> impl Responder {
+    let client_addr = req
+        .peer_addr()
         .map(|a| a.to_string())
         .unwrap_or_else(|| "Unknown".to_string());
+    let status_json = get_status(*start.get_ref());
+    let status = serde_json::json!({ "success": true, "data": status_json });
 
-    info!(target: "status_handler", "Client {} requested status", client_addr);
+    info!(target: "status_handler", "Client {} requested status: {}", client_addr, status);
+    HttpResponse::Ok().json(status)
+}
+
+
+#[get("/stop")]
+async fn stop_handler() -> impl Responder {
+    info!(target: "control", "Received /stop request. Exiting...");
+
+    tokio::spawn(async {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        std::process::exit(0);
+    });
+
     HttpResponse::Ok().json(serde_json::json!({ "success": true, "data": null }))
 }
 
-// ------------------ Main --------------------
+
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    init_tracing();
+    let start = Instant::now();
+    let start_data = web::Data::new(start);
+    let config = load_config();
 
-    let port = 1030;
-    let ip = "127.0.0.1";
+    init_tracing(&config.logs_dir, &config.name_for_port_manager);
 
-    info!(target: "main", "Starting port manager microservice on {}:{}", ip, port);
-    info!(target: "main", "Version: 4.4.14 r");
+    let port: u16 = config.static_port.expect("Port not defined in config for port manager");
+    let ip = config.ip.clone();
 
-    HttpServer::new(|| {
+    info!(target: "main", "Starting {} on {}:{}", &config.name_for_port_manager, ip, port);
+
+    HttpServer::new(move || {
         App::new()
-            .wrap(Logger::default())
+            .app_data(start_data.clone())
             .service(get_port_handler)
-            .service(get_module_status)
+            .service(status_handler)
+            .service(stop_handler)
     })
     .workers(4)
-    .bind((ip, port))?
+    .bind((ip.as_str(), port))?
     .run()
     .await
-}
-
-fn init_tracing() {
-    let date = Local::now().format("%d_%m_%Y").to_string();
-    let log_path = format!("./logs/port_manager_microservice_{}.log", date);
-    std::fs::create_dir_all("./logs").ok();
-
-    tracing_subscriber::fmt()
-        .with_target(true)
-        .with_writer(std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(log_path)
-            .expect("Cannot open log file"))
-        .with_thread_names(true)
-        .with_ansi(false)
-        .init();
 }
