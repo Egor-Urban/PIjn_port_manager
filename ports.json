@@ -1,4 +1,14 @@
 {
-    "random_module_microservice": 1031,
-    "modulestatus_microservice": 1032
+  "random_module_microservice": {
+    "ip": null,
+    "port": 1031
+  },
+  "modulestatus_microservice": {
+    "ip": null,
+    "port": 1032
+  },
+  "crypto_module_microservice": {
+    "ip": null,
+    "port": 1033
+  }
 }
